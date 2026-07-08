@@ -1,0 +1,6 @@
+# Replace <your-local-domain> with your choice (e.g., local-9router.com)
+# Replace <port> with your service port (e.g., 20128)
+<your-local-domain> {
+    tls internal
+    reverse_proxy localhost:<port>
+}
