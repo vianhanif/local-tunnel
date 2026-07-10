@@ -2,14 +2,14 @@
 
 **Permanent HTTPS tunnel for local AI model servers**
 
-Expose your local AI model server to the internet with a production-grade HTTPS connection. This setup powers tools like Warp and Cursor with local AI models.
+Expose your local AI model server to the internet with a production-grade HTTPS connection.
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        Internet                                  │
-│              https://api.yourdomain.com                         │
+│              https://<your-domain>                               │
 └─────────────────────────────────────────────────────────────────┘
                               ▲
                               │ HTTPS (Cloudflare)
@@ -30,7 +30,7 @@ Expose your local AI model server to the internet with a production-grade HTTPS 
                               │
 ┌─────────────────────────────────────────────────────────────────┐
 │              Local AI Model Server (e.g., 9router)              │
-│                     http://localhost:20128                      │
+│                     http://localhost:<PORT>                      │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -60,7 +60,7 @@ The script will guide you through:
 3. Creating a tunnel with your domain
 4. Installing the launchd service
 
-After setup, your tunnel URL will be: `https://<your-subdomain>/v1`
+After setup, your tunnel URL will be: `https://<your-domain>`
 
 ## Manual Setup
 
@@ -75,9 +75,9 @@ brew install caddy
 Copy `Caddyfile` to your working directory and edit:
 
 ```
-api.yourdomain.com {
+<your-domain> {
     tls internal
-    reverse_proxy localhost:20128
+    reverse_proxy localhost:<PORT>
 }
 ```
 
@@ -92,7 +92,7 @@ caddy start
 If using a local-only domain, add to `/etc/hosts`:
 
 ```bash
-echo '127.0.0.1 api.yourdomain.com' | sudo tee -a /etc/hosts
+echo '127.0.0.1 <your-domain>' | sudo tee -a /etc/hosts
 ```
 
 ### 4. Install cloudflared
@@ -112,7 +112,7 @@ Opens browser — authenticate with your Cloudflare account.
 ### 6. Create tunnel
 
 ```bash
-cloudflared tunnel create my-api-tunnel
+cloudflared tunnel create <tunnel-name>
 ```
 
 This creates a credentials file at `~/.cloudflared/<TUNNEL_ID>.json`.
@@ -120,7 +120,7 @@ This creates a credentials file at `~/.cloudflared/<TUNNEL_ID>.json`.
 ### 7. Route DNS
 
 ```bash
-cloudflared tunnel route dns my-api-tunnel api.yourdomain.com
+cloudflared tunnel route dns <tunnel-name> <your-domain>
 ```
 
 ### 8. Configure and install service
@@ -142,8 +142,8 @@ tunnel: <TUNNEL_ID>
 credentials-file: /Users/<USERNAME>/.cloudflared/<TUNNEL_ID>.json
 
 ingress:
-  - hostname: api.yourdomain.com
-    service: http://localhost:20128
+  - hostname: <your-domain>
+    service: http://localhost:<PORT>
   - service: http_status:404
 ```
 
@@ -159,19 +159,27 @@ launchctl load ~/Library/LaunchAgents/com.local-tunnel.cloudflared.plist
 
 The tunnel starts immediately and will respawn automatically after crashes or reboots.
 
+### 10. Verify
+
+```bash
+cloudflared tunnel info <tunnel-name>
+```
+
+You should see "CONNECTOR ID" with 1+ active connections.
+
 ## Usage
 
 Use the public URL as an OpenAI-compatible endpoint in any AI client:
 
 ```
-https://api.yourdomain.com/v1
+https://<your-domain>/v1
 ```
 
 ### Warp AI
 
 1. Open Warp settings → AI Providers
 2. Add custom OpenAI-compatible provider
-3. Set endpoint to `https://api.yourdomain.com/v1`
+3. Set endpoint to `https://<your-domain>/v1`
 4. Leave API key blank or set whatever your local server expects
 
 ### Cursor
@@ -179,13 +187,25 @@ https://api.yourdomain.com/v1
 1. Settings → AI Settings → Custom Providers
 2. Add your endpoint
 
+## Aliases
+
+The following can be added to `~/.zshrc` for convenience:
+
+```bash
+alias tunnel-start='if launchctl list com.local-tunnel.cloudflared &>/dev/null; then echo "tunnel already running"; else launchctl load ~/Library/LaunchAgents/com.local-tunnel.cloudflared.plist && echo "tunnel started"; fi'
+alias tunnel-status='cloudflared tunnel info <tunnel-name>'
+alias tunnel-logs='tail -20 /tmp/cloudflared-tunnel.log'
+alias tunnel-err='tail -20 /tmp/cloudflared-tunnel.err'
+```
+
 ## Configuration Reference
 
 | Placeholder | Description |
 |---|---|
 | `<TUNNEL_ID>` | UUID from credentials filename (e.g., `abc123-def456-...`) |
 | `<USERNAME>` | Your macOS username |
-| `<SUBDOMAIN.YOURDOMAIN.COM>` | Your subdomain (e.g., `api.example.com`) |
+| `<your-domain>` | Your subdomain (e.g., `api.example.com`) |
+| `<tunnel-name>` | Your tunnel name (e.g., `my-api-tunnel`) |
 | `<PORT>` | Your local service port (e.g., `20128`) |
 
 ## File Structure
@@ -204,7 +224,7 @@ local-tunnel/
 ### Check tunnel status
 
 ```bash
-cloudflared tunnel info my-api-tunnel
+cloudflared tunnel info <tunnel-name>
 cloudflared tunnel list
 ```
 
@@ -244,7 +264,7 @@ rm ~/Library/LaunchAgents/com.local-tunnel.cloudflared.plist
 Delete the tunnel (also removes DNS route):
 
 ```bash
-cloudflared tunnel delete my-api-tunnel
+cloudflared tunnel delete <tunnel-name>
 ```
 
 Stop Caddy:
